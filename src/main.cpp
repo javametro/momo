@@ -76,7 +76,7 @@ int main(int argc, char* argv[]) {
   rtc::LogMessage::LogThreads();
 
   std::unique_ptr<rtc::FileRotatingLogSink> log_sink(
-      new rtc::FileRotatingLogSink("./", "webrtc_logs", kDefaultMaxLogFileSize,
+      new rtc::FileRotatingLogSink("C:\\ProgramData", "webrtc_logs", kDefaultMaxLogFileSize,
                                    10));
   if (!log_sink->Init()) {
     RTC_LOG(LS_ERROR) << __FUNCTION__ << "Failed to open log file";
