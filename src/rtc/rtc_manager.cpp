@@ -284,8 +284,11 @@ std::shared_ptr<RTCConnection> RTCManager::CreateConnection(
     return nullptr;
   }
 
-  return std::make_shared<RTCConnection>(sender, std::move(observer),
+  auto new_connection = std::make_shared<RTCConnection>(sender, std::move(observer),
                                          connection.value());
+
+  observer->SetRTCConnection(new_connection.get());
+  return new_connection;
 }
 
 void RTCManager::InitTracks(RTCConnection* conn) {

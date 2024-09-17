@@ -52,6 +52,15 @@ class RTCConnection {
 
   rtc::scoped_refptr<webrtc::PeerConnectionInterface> GetConnection() const;
 
+  typedef std::function<void()> ConnectionCallback;
+  void SetOnConnected(ConnectionCallback callback) { on_connected_ = callback; }
+  void SetOnDisconnected(ConnectionCallback callback) {
+    on_disconnected_ = callback;
+  }
+
+  ConnectionCallback on_connected_;
+  ConnectionCallback on_disconnected_;
+
  private:
   rtc::scoped_refptr<webrtc::MediaStreamInterface> GetLocalStream();
   rtc::scoped_refptr<webrtc::AudioTrackInterface> GetLocalAudioTrack();
@@ -67,6 +76,8 @@ class RTCConnection {
   rtc::scoped_refptr<webrtc::PeerConnectionInterface> connection_;
   std::vector<webrtc::RtpEncodingParameters> encodings_;
   std::string mid_;
+
+ 
 };
 
 #endif

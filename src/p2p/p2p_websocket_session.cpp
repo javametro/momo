@@ -101,6 +101,16 @@ void P2PWebsocketSession::OnRead(boost::system::error_code ec,
     std::string sdp = recv_message.at("sdp").as_string().c_str();
 
     connection_ = CreateRTCConnection();
+    connection_->SetOnConnected([this]() {
+      RTC_LOG(LS_INFO) << "WebRTC Peer Connection Established";
+      // Add any other logic you want to execute on connection
+    });
+
+    connection_->SetOnDisconnected([this]() {
+      RTC_LOG(LS_INFO) << "WebRTC Peer Connection Disconnected";
+      // Add any other logic you want to execute on disconnection
+    });
+
     connection_->SetOffer(sdp, [this]() {
       connection_->CreateAnswer(
           [this](webrtc::SessionDescriptionInterface* desc) {
@@ -151,6 +161,8 @@ std::shared_ptr<RTCConnection> P2PWebsocketSession::CreateRTCConnection() {
   rtc_config.servers = servers;
   auto connection = rtc_manager_->CreateConnection(rtc_config, this);
   rtc_manager_->InitTracks(connection.get());
+
+
 
   return connection;
 }
