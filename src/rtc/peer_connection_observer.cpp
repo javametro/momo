@@ -4,8 +4,6 @@
 
 // WebRTC
 #include <rtc_base/logging.h>
-#include "rtc_connection.h"
-
 
 PeerConnectionObserver::~PeerConnectionObserver() {
   // Ayame 再接続時などには kIceConnectionDisconnected の前に破棄されているため
@@ -14,10 +12,6 @@ PeerConnectionObserver::~PeerConnectionObserver() {
 
 RTCDataManager* PeerConnectionObserver::DataManager() {
   return data_manager_;
-}
-
-void PeerConnectionObserver::SetRTCConnection(RTCConnection* connection) {
-  rtc_connection_ = connection;
 }
 
 void PeerConnectionObserver::OnDataChannel(
@@ -29,19 +23,10 @@ void PeerConnectionObserver::OnDataChannel(
 
 void PeerConnectionObserver::OnStandardizedIceConnectionChange(
     webrtc::PeerConnectionInterface::IceConnectionState new_state) {
-  RTC_LOG(LS_INFO) << __FUNCTION__ << " state:" << new_state;
+  RTC_LOG(LS_INFO) << __FUNCTION__ << " :" << new_state;
   if (new_state == webrtc::PeerConnectionInterface::IceConnectionState::
-                       kIceConnectionConnected) {
-    if (rtc_connection_ && rtc_connection_->on_connected_) {
-      rtc_connection_->on_connected_();
-    }
-  } else if (new_state == webrtc::PeerConnectionInterface::IceConnectionState::
-                              kIceConnectionDisconnected ||
-             new_state == webrtc::PeerConnectionInterface::IceConnectionState::
-                              kIceConnectionFailed) {
-    if (rtc_connection_ && rtc_connection_->on_disconnected_) {
-      rtc_connection_->on_disconnected_();
-    }
+                       kIceConnectionDisconnected) {
+    ClearAllRegisteredTracks();
   }
   if (sender_ != nullptr) {
     sender_->OnIceConnectionStateChange(new_state);

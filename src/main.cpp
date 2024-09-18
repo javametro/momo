@@ -46,13 +46,6 @@
 #include <rtc_base/win/scoped_com_initializer.h>
 #endif
 
-//To Do
-//Add an event to listen to the display change event.
-//use a pipe server to listen or use GlobalEvent
-//Send the ip-address to the HidService
-//SelectSource() to dynamic change the source
-//ClientConnected and ClientDisconnected events to report to backgroud.
-
 #if defined(USE_NVCODEC_ENCODER)
 #include "sora/cuda_context.h"
 #endif
@@ -118,9 +111,29 @@ int main(int argc, char* argv[]) {
         return nullptr;
       }
 
+      RTC_LOG(LS_INFO) << "Available screen capture sources:";
+      for (const auto& source : sources) {
+        RTC_LOG(LS_INFO) << "  ID: " << source.id
+                         << ", Display ID: " << source.display_id
+                         << ", Title: " << source.title;
+      }
+
+      if (sources.empty()) {
+        RTC_LOG(LS_ERROR) << "No screen capture sources available";
+        return nullptr;
+      }
+
+      size_t source_index = 0;
+      if (sources.size() > 1) {
+        source_index = 1;
+        RTC_LOG(LS_INFO) << "Using the second available screen capture source";
+      } else {
+        RTC_LOG(LS_INFO) << "Using the only available screen capture source";
+      }
+
       auto size = args.GetSize();
       return rtc::make_ref_counted<ScreenVideoCapturer>(
-          sources[1].id, size.width, size.height, args.framerate);
+          sources[source_index].id, size.width, size.height, args.framerate);
     }
 #endif
 

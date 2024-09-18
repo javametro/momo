@@ -7,7 +7,6 @@
 #include "rtc_data_manager.h"
 #include "rtc_message_sender.h"
 #include "video_track_receiver.h"
-class RTCConnection;
 
 class PeerConnectionObserver : public webrtc::PeerConnectionObserver {
  public:
@@ -18,11 +17,6 @@ class PeerConnectionObserver : public webrtc::PeerConnectionObserver {
   ~PeerConnectionObserver();
 
   RTCDataManager* DataManager();
-  void SetRTCConnection(RTCConnection* connection);
-
- private:
-  RTCConnection* rtc_connection_ = nullptr;
-
 
  private:
   void OnSignalingChange(

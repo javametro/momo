@@ -57,6 +57,9 @@ class P2PWebsocketSession
 
   std::shared_ptr<RTCConnection> CreateRTCConnection();
 
+  void OnScreenCaptureConnected();
+  void OnScreenCaptureDisconnected();
+
  private:
   //WebRTC
   void OnIceConnectionStateChange(
@@ -75,6 +78,8 @@ class P2PWebsocketSession
 
   std::shared_ptr<RTCConnection> connection_;
   webrtc::PeerConnectionInterface::IceConnectionState rtc_state_;
+
+  bool is_connected_ = false;
 };
 
 #endif  // P2P_WEBSOCKET_SESSION_H_

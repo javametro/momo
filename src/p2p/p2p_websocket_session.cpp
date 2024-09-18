@@ -30,6 +30,9 @@ P2PWebsocketSession::P2PWebsocketSession(boost::asio::io_context& ioc,
 
 P2PWebsocketSession::~P2PWebsocketSession() {
   RTC_LOG(LS_INFO) << __FUNCTION__;
+  if (is_connected_) {
+    OnScreenCaptureDisconnected();
+  }
 }
 
 void P2PWebsocketSession::Run(
@@ -101,16 +104,6 @@ void P2PWebsocketSession::OnRead(boost::system::error_code ec,
     std::string sdp = recv_message.at("sdp").as_string().c_str();
 
     connection_ = CreateRTCConnection();
-    connection_->SetOnConnected([this]() {
-      RTC_LOG(LS_INFO) << "WebRTC Peer Connection Established";
-      // Add any other logic you want to execute on connection
-    });
-
-    connection_->SetOnDisconnected([this]() {
-      RTC_LOG(LS_INFO) << "WebRTC Peer Connection Disconnected";
-      // Add any other logic you want to execute on disconnection
-    });
-
     connection_->SetOffer(sdp, [this]() {
       connection_->CreateAnswer(
           [this](webrtc::SessionDescriptionInterface* desc) {
@@ -137,6 +130,10 @@ void P2PWebsocketSession::OnRead(boost::system::error_code ec,
     std::string candidate = ice.at("candidate").as_string().c_str();
     connection_->AddIceCandidate(sdp_mid, sdp_mlineindex, candidate);
   } else if (type == "close" || type == "bye") {
+    if (is_connected_) {
+      is_connected_ = false;
+      OnScreenCaptureDisconnected();
+    }
     connection_ = nullptr;
   } else if (type == "register") {
     boost::json::value accept_message = {
@@ -162,8 +159,6 @@ std::shared_ptr<RTCConnection> P2PWebsocketSession::CreateRTCConnection() {
   auto connection = rtc_manager_->CreateConnection(rtc_config, this);
   rtc_manager_->InitTracks(connection.get());
 
-
-
   return connection;
 }
 
@@ -174,6 +169,24 @@ void P2PWebsocketSession::OnIceConnectionStateChange(
                    << Util::IceConnectionStateToString(new_state);
 
   rtc_state_ = new_state;
+
+  if (new_state == webrtc::PeerConnectionInterface::IceConnectionState::
+                       kIceConnectionConnected) {
+    if (!is_connected_) {
+      is_connected_ = true;
+      OnScreenCaptureConnected();
+    }
+  } else if (new_state == webrtc::PeerConnectionInterface::IceConnectionState::
+                              kIceConnectionDisconnected ||
+             new_state == webrtc::PeerConnectionInterface::IceConnectionState::
+                              kIceConnectionClosed ||
+             new_state == webrtc::PeerConnectionInterface::IceConnectionState::
+                              kIceConnectionFailed) {
+    if (is_connected_) {
+      is_connected_ = false;
+      OnScreenCaptureDisconnected();
+    }
+  }
 }
 
 void P2PWebsocketSession::OnIceCandidate(const std::string sdp_mid,
@@ -187,4 +200,12 @@ void P2PWebsocketSession::OnIceCandidate(const std::string sdp_mid,
                       {"sdpMid", sdp_mid}};
   std::string str_cand = boost::json::serialize(json_cand);
   ws_->WriteText(str_cand);
+}
+
+void P2PWebsocketSession::OnScreenCaptureConnected() {
+  RTC_LOG(LS_INFO) << "Screen capture connection established";
+}
+
+void P2PWebsocketSession::OnScreenCaptureDisconnected() {
+  RTC_LOG(LS_INFO) << "Screen capture connection disconnected";
 }
