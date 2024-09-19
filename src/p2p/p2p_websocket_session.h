@@ -16,9 +16,12 @@
 #include "util.h"
 #include "watchdog.h"
 #include "websocket.h"
+#include "PipeClient.h"
 
 struct P2PWebsocketSessionConfig {
   bool no_google_stun = false;
+  std::string pipe_name;
+  std::unique_ptr<Websocket> ws_;
 };
 
 class P2PWebsocketSession
@@ -80,6 +83,7 @@ class P2PWebsocketSession
   webrtc::PeerConnectionInterface::IceConnectionState rtc_state_;
 
   bool is_connected_ = false;
+  std::unique_ptr<PipeClient> pipe_client_;
 };
 
 #endif  // P2P_WEBSOCKET_SESSION_H_

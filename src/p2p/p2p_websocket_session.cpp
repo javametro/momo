@@ -7,6 +7,7 @@
 #include <boost/json.hpp>
 
 #include "util.h"
+#include "PipeClient.h"
 
 std::shared_ptr<RTCConnection> P2PWebsocketSession::GetRTCConnection() const {
   if (rtc_state_ == webrtc::PeerConnectionInterface::IceConnectionState::
@@ -24,7 +25,8 @@ P2PWebsocketSession::P2PWebsocketSession(boost::asio::io_context& ioc,
     : ws_(new Websocket(std::move(socket))),
       rtc_manager_(rtc_manager),
       config_(std::move(config)),
-      watchdog_(ioc, std::bind(&P2PWebsocketSession::OnWatchdogExpired, this)) {
+      watchdog_(ioc, std::bind(&P2PWebsocketSession::OnWatchdogExpired, this)),
+      pipe_client_(std::make_unique<PipeClient>(ioc, config_.pipe_name)) {
   RTC_LOG(LS_INFO) << __FUNCTION__;
 }
 
@@ -204,8 +206,14 @@ void P2PWebsocketSession::OnIceCandidate(const std::string sdp_mid,
 
 void P2PWebsocketSession::OnScreenCaptureConnected() {
   RTC_LOG(LS_INFO) << "Screen capture connection established";
+  /*if (pipe_client_) {
+    pipe_client_->SendMessage("SCREEN_CAPTURE_CONNECTED");
+  }*/
 }
 
 void P2PWebsocketSession::OnScreenCaptureDisconnected() {
   RTC_LOG(LS_INFO) << "Screen capture connection disconnected";
+  //if (pipe_client_) {
+  //  pipe_client_->SendMessage("SCREEN_CAPTURE_DISCONNECTED");
+  //}
 }

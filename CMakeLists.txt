@@ -134,6 +134,7 @@ target_sources(momo
     src/util.cpp
     src/watchdog.cpp
     src/websocket.cpp
+    src/PipeClient.cpp
 )
 
 target_include_directories(momo PRIVATE src)
