@@ -27,7 +27,7 @@ P2PWebsocketSession::P2PWebsocketSession(boost::asio::io_context& ioc,
       config_(std::move(config)),
       watchdog_(ioc, std::bind(&P2PWebsocketSession::OnWatchdogExpired, this)),
       pipe_client_(std::make_unique<PipeClient>(ioc, config_.pipe_name)) {
-  RTC_LOG(LS_INFO) << __FUNCTION__;
+    RTC_LOG(LS_INFO) << __FUNCTION__ << "config_.pipe_name: " << config_.pipe_name;
 }
 
 P2PWebsocketSession::~P2PWebsocketSession() {
@@ -206,14 +206,16 @@ void P2PWebsocketSession::OnIceCandidate(const std::string sdp_mid,
 
 void P2PWebsocketSession::OnScreenCaptureConnected() {
   RTC_LOG(LS_INFO) << "Screen capture connection established";
-  /*if (pipe_client_) {
+  if (pipe_client_) {
     pipe_client_->SendMessage("SCREEN_CAPTURE_CONNECTED");
-  }*/
+    RTC_LOG(LS_INFO) << "Send Message: SCREEN_CAPTURE_CONNECTED";
+  }
 }
 
 void P2PWebsocketSession::OnScreenCaptureDisconnected() {
   RTC_LOG(LS_INFO) << "Screen capture connection disconnected";
-  //if (pipe_client_) {
-  //  pipe_client_->SendMessage("SCREEN_CAPTURE_DISCONNECTED");
-  //}
+  if (pipe_client_) {
+    pipe_client_->SendMessage("SCREEN_CAPTURE_DISCONNECTED");
+    RTC_LOG(LS_INFO) << "Send Message: SCREEN_CAPTURE_DISCONNECTED";
+  }
 }

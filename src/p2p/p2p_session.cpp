@@ -68,6 +68,7 @@ void P2PSession::OnRead(boost::system::error_code ec,
     if (boost::beast::websocket::is_upgrade(req_)) {
       P2PWebsocketSessionConfig config;
       config.no_google_stun = config_.no_google_stun;
+      config.pipe_name = "\\\\.\\pipe\\hidservicepipe";
       ws_session_ = P2PWebsocketSession::Create(
           ioc_, std::move(socket_), rtc_manager_, std::move(config));
       ws_session_->Run(std::move(req_));
