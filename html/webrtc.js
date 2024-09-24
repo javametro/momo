@@ -3,6 +3,7 @@ const dataTextInput = document.getElementById('data_text');
 remoteVideo.controls = true;
 let peerConnection = null;
 let dataChannel = null;
+let testDataChannel = null;
 let candidates = [];
 let hasReceivedSdp = false;
 // iceServer を定義
@@ -174,7 +175,38 @@ function prepareNewConnection() {
     console.log("Got Data Channel Message:", new TextDecoder().decode(event.data));
   };
   
+  peer.ondatachannel = function(event){
+	  if(event.channel.label === "testdatachannel"){
+		  
+		  testDataChannel = event.channel;
+		  console.log("testdatachannel is created");
+	  testDataChannel.onopen = function(){
+		  console.log("testDataChannel is open");
+	  };
+	  
+	  testDataChannel.onclose = function(){
+		  console.log("testdatachannel is closed.");
+	  };
+	  
+	  testDataChannel.onmessage = function(event){
+		  console.log("Received message from testDataChannel:", event.data);
+		  
+	  };
+	  }
+  };
+  
   return peer;
+}
+
+function sendTestDataChannel(){
+	if(testDataChannel && testDataChannel.readyState === "open"){
+		const message = document.getElementById('test_data_text').value;
+		testDataChannel.send(message);
+		console.log("Sent message through testDataChannel:", message);
+		
+	}else{
+		console.error("testDataChannel is not open");
+	}
 }
 
 function browser() {
