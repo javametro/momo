@@ -26,7 +26,8 @@ struct P2PWebsocketSessionConfig {
 
 class P2PWebsocketSession
     : public std::enable_shared_from_this<P2PWebsocketSession>,
-      public RTCMessageSender {
+      public RTCMessageSender,
+      public webrtc::DataChannelObserver{
   P2PWebsocketSession(boost::asio::io_context& ioc,
                       boost::asio::ip::tcp::socket socket,
                       RTCManager* rtc_manager,
@@ -41,6 +42,9 @@ class P2PWebsocketSession
     return std::shared_ptr<P2PWebsocketSession>(new P2PWebsocketSession(
         ioc, std::move(socket), rtc_manager, std::move(config)));
   }
+
+  void OnStateChange() override;
+  void OnMessage(const webrtc::DataBuffer& buffer) override; 
   ~P2PWebsocketSession();
 
   void Run(boost::beast::http::request<boost::beast::http::string_body> req);
@@ -73,7 +77,7 @@ class P2PWebsocketSession
 
  private:
   std::unique_ptr<Websocket> ws_;
-
+  rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel_;
   WatchDog watchdog_;
 
   RTCManager* rtc_manager_;

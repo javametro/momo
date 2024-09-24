@@ -73,6 +73,23 @@ void P2PWebsocketSession::DoRead() {
                       std::placeholders::_3));
 }
 
+void P2PWebsocketSession::OnStateChange() {
+  if (data_channel_) {
+    RTC_LOG(LS_INFO) << "DataChannel state changed to "
+                     << data_channel_->state();
+  }
+}
+
+void P2PWebsocketSession::OnMessage(const webrtc::DataBuffer& buffer) {
+  std::string message(buffer.data.data<char>(), buffer.data.size());
+  RTC_LOG(LS_INFO) << "Received Datachannel message: " << message;
+
+  boost::json::object json_message = {{"type", "datachannel"},
+                                      {"message", message}};
+
+  ws_->WriteText(boost::json::serialize(json_message));
+}
+
 void P2PWebsocketSession::OnRead(boost::system::error_code ec,
                                  std::size_t bytes_transferred,
                                  std::string recv_string) {
@@ -161,6 +178,19 @@ std::shared_ptr<RTCConnection> P2PWebsocketSession::CreateRTCConnection() {
   auto connection = rtc_manager_->CreateConnection(rtc_config, this);
   rtc_manager_->InitTracks(connection.get());
 
+  webrtc::DataChannelInit config;
+  auto result = connection->GetConnection()->CreateDataChannelOrError(
+      "testdatachannel", &config);
+  if (result.ok()) {
+      data_channel_ = result.value();
+    RTC_LOG(LS_INFO) << "Datachannel created successfully.";
+      data_channel_->RegisterObserver(this);
+
+  }
+  else {
+    RTC_LOG(LS_ERROR) << "Failed to create DataChannel: "
+                      << result.error().message();
+  }
   return connection;
 }
 
