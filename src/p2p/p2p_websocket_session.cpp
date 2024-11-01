@@ -6,8 +6,8 @@
 #include <boost/beast/websocket/stream.hpp>
 #include <boost/json.hpp>
 
-#include "util.h"
 #include "PipeClient.h"
+#include "util.h"
 
 std::shared_ptr<RTCConnection> P2PWebsocketSession::GetRTCConnection() const {
   if (rtc_state_ == webrtc::PeerConnectionInterface::IceConnectionState::
@@ -27,7 +27,8 @@ P2PWebsocketSession::P2PWebsocketSession(boost::asio::io_context& ioc,
       config_(std::move(config)),
       watchdog_(ioc, std::bind(&P2PWebsocketSession::OnWatchdogExpired, this)),
       pipe_client_(std::make_unique<PipeClient>(ioc, config_.pipe_name)) {
-    RTC_LOG(LS_INFO) << __FUNCTION__ << "config_.pipe_name: " << config_.pipe_name;
+  RTC_LOG(LS_INFO) << __FUNCTION__
+                   << "config_.pipe_name: " << config_.pipe_name;
 }
 
 P2PWebsocketSession::~P2PWebsocketSession() {
@@ -84,6 +85,14 @@ void P2PWebsocketSession::OnMessage(const webrtc::DataBuffer& buffer) {
   std::string message(buffer.data.data<char>(), buffer.data.size());
   RTC_LOG(LS_INFO) << "Received Datachannel message: " << message;
 
+  // Echo the message back through the datachannel
+  if (data_channel_ &&
+      data_channel_->state() == webrtc::DataChannelInterface::kOpen) {
+    webrtc::DataBuffer echo_buffer(buffer.data, buffer.binary);
+    data_channel_->Send(echo_buffer);
+  }
+
+  // Keep the existing websocket message forwarding
   boost::json::object json_message = {{"type", "datachannel"},
                                       {"message", message}};
 
@@ -173,8 +182,18 @@ std::shared_ptr<RTCConnection> P2PWebsocketSession::CreateRTCConnection() {
     webrtc::PeerConnectionInterface::IceServer ice_server;
     ice_server.uri = "stun:stun.l.google.com:19302";
     servers.push_back(ice_server);
+    ice_server.uri = "stun:stun1.l.google.com:19302";
+    servers.push_back(ice_server);
+    ice_server.uri = "stun:stun2.l.google.com:19302";
+    servers.push_back(ice_server);
   }
+
   rtc_config.servers = servers;
+  rtc_config.ice_connection_receiving_timeout = 5000;         // 5 seconds
+  rtc_config.ice_backup_candidate_pair_ping_interval = 2000;  // 2 seconds
+  rtc_config.continual_gathering_policy =
+      webrtc::PeerConnectionInterface::GATHER_CONTINUALLY;
+
   auto connection = rtc_manager_->CreateConnection(rtc_config, this);
   rtc_manager_->InitTracks(connection.get());
 
@@ -182,12 +201,11 @@ std::shared_ptr<RTCConnection> P2PWebsocketSession::CreateRTCConnection() {
   auto result = connection->GetConnection()->CreateDataChannelOrError(
       "testdatachannel", &config);
   if (result.ok()) {
-      data_channel_ = result.value();
+    data_channel_ = result.value();
     RTC_LOG(LS_INFO) << "Datachannel created successfully.";
-      data_channel_->RegisterObserver(this);
+    data_channel_->RegisterObserver(this);
 
-  }
-  else {
+  } else {
     RTC_LOG(LS_ERROR) << "Failed to create DataChannel: "
                       << result.error().message();
   }
@@ -201,6 +219,24 @@ void P2PWebsocketSession::OnIceConnectionStateChange(
                    << Util::IceConnectionStateToString(new_state);
 
   rtc_state_ = new_state;
+
+  if (connection_) {
+    class StatsCallback : public webrtc::RTCStatsCollectorCallback {
+     public:
+      void OnStatsDelivered(
+          const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report)
+          override {
+        std::string stats;
+        for (const auto& stat : *report) {
+          stats += stat.ToJson() + "\n";
+        }
+        RTC_LOG(LS_INFO) << "ICE Candidates gathered: " << stats;
+      }
+    };
+
+    connection_->GetConnection()->GetStats(
+        new rtc::RefCountedObject<StatsCallback>());
+  }
 
   if (new_state == webrtc::PeerConnectionInterface::IceConnectionState::
                        kIceConnectionConnected) {
