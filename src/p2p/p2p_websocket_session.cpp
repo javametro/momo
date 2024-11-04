@@ -85,6 +85,7 @@ void P2PWebsocketSession::OnMessage(const webrtc::DataBuffer& buffer) {
   std::string message(buffer.data.data<char>(), buffer.data.size());
   RTC_LOG(LS_INFO) << "Received Datachannel message: " << message;
 
+<<<<<<< HEAD
   // Echo back the received message through the data channel
   rtc::CopyOnWriteBuffer echo_buffer(message);
   webrtc::DataBuffer echo_data(echo_buffer, false);
@@ -183,8 +184,18 @@ std::shared_ptr<RTCConnection> P2PWebsocketSession::CreateRTCConnection() {
     webrtc::PeerConnectionInterface::IceServer ice_server;
     ice_server.uri = "stun:stun.l.google.com:19302";
     servers.push_back(ice_server);
+    ice_server.uri = "stun:stun1.l.google.com:19302";
+    servers.push_back(ice_server);
+    ice_server.uri = "stun:stun2.l.google.com:19302";
+    servers.push_back(ice_server);
   }
+
   rtc_config.servers = servers;
+  rtc_config.ice_connection_receiving_timeout = 5000;         // 5 seconds
+  rtc_config.ice_backup_candidate_pair_ping_interval = 2000;  // 2 seconds
+  rtc_config.continual_gathering_policy =
+      webrtc::PeerConnectionInterface::GATHER_CONTINUALLY;
+
   auto connection = rtc_manager_->CreateConnection(rtc_config, this);
   rtc_manager_->InitTracks(connection.get());
 
@@ -212,6 +223,24 @@ void P2PWebsocketSession::OnIceConnectionStateChange(
                    << Util::IceConnectionStateToString(new_state);
 
   rtc_state_ = new_state;
+
+  if (connection_) {
+    class StatsCallback : public webrtc::RTCStatsCollectorCallback {
+     public:
+      void OnStatsDelivered(
+          const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report)
+          override {
+        std::string stats;
+        for (const auto& stat : *report) {
+          stats += stat.ToJson() + "\n";
+        }
+        RTC_LOG(LS_INFO) << "ICE Candidates gathered: " << stats;
+      }
+    };
+
+    connection_->GetConnection()->GetStats(
+        new rtc::RefCountedObject<StatsCallback>());
+  }
 
   if (new_state == webrtc::PeerConnectionInterface::IceConnectionState::
                        kIceConnectionConnected) {
