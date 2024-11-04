@@ -6,8 +6,8 @@
 #include <boost/beast/websocket/stream.hpp>
 #include <boost/json.hpp>
 
-#include "util.h"
 #include "PipeClient.h"
+#include "util.h"
 
 std::shared_ptr<RTCConnection> P2PWebsocketSession::GetRTCConnection() const {
   if (rtc_state_ == webrtc::PeerConnectionInterface::IceConnectionState::
@@ -27,7 +27,8 @@ P2PWebsocketSession::P2PWebsocketSession(boost::asio::io_context& ioc,
       config_(std::move(config)),
       watchdog_(ioc, std::bind(&P2PWebsocketSession::OnWatchdogExpired, this)),
       pipe_client_(std::make_unique<PipeClient>(ioc, config_.pipe_name)) {
-    RTC_LOG(LS_INFO) << __FUNCTION__ << "config_.pipe_name: " << config_.pipe_name;
+  RTC_LOG(LS_INFO) << __FUNCTION__
+                   << "config_.pipe_name: " << config_.pipe_name;
 }
 
 P2PWebsocketSession::~P2PWebsocketSession() {
@@ -84,6 +85,15 @@ void P2PWebsocketSession::OnMessage(const webrtc::DataBuffer& buffer) {
   std::string message(buffer.data.data<char>(), buffer.data.size());
   RTC_LOG(LS_INFO) << "Received Datachannel message: " << message;
 
+  // Echo back the received message through the data channel
+  rtc::CopyOnWriteBuffer echo_buffer(message);
+  webrtc::DataBuffer echo_data(echo_buffer, false);
+  if (data_channel_ &&
+      data_channel_->state() == webrtc::DataChannelInterface::kOpen) {
+    data_channel_->Send(echo_data);
+  }
+
+  // Also send to websocket for compatibility
   boost::json::object json_message = {{"type", "datachannel"},
                                       {"message", message}};
 
@@ -179,15 +189,16 @@ std::shared_ptr<RTCConnection> P2PWebsocketSession::CreateRTCConnection() {
   rtc_manager_->InitTracks(connection.get());
 
   webrtc::DataChannelInit config;
+  config.ordered = true;
+  config.reliable = true;
+
   auto result = connection->GetConnection()->CreateDataChannelOrError(
       "testdatachannel", &config);
   if (result.ok()) {
-      data_channel_ = result.value();
+    data_channel_ = result.value();
     RTC_LOG(LS_INFO) << "Datachannel created successfully.";
-      data_channel_->RegisterObserver(this);
-
-  }
-  else {
+    data_channel_->RegisterObserver(this);
+  } else {
     RTC_LOG(LS_ERROR) << "Failed to create DataChannel: "
                       << result.error().message();
   }

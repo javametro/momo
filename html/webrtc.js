@@ -415,9 +415,28 @@ function sendDataChannel() {
   if (textData.length == 0) {
     return;
   }
-  if (dataChannel == null || dataChannel.readyState != "open") {
+  if (testDataChannel == null || testDataChannel.readyState != "open") {
+    console.log("DataChannel not ready");
     return;
   }
-  dataChannel.send(new TextEncoder().encode(textData));
+  testDataChannel.send(textData);
+  console.log("Sent data:", textData);
   dataTextInput.value = "";
+}
+
+// Add this function to handle incoming messages
+function setupDataChannel(dc) {
+  dc.onmessage = function(event) {
+    console.log("Received data:", event.data);
+    // You can handle the received data here
+    // For example, display it in a div element
+  };
+  
+  dc.onopen = function() {
+    console.log("DataChannel is open");
+  };
+  
+  dc.onclose = function() {
+    console.log("DataChannel is closed");
+  };
 }
