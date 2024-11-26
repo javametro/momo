@@ -85,7 +85,6 @@ void P2PWebsocketSession::OnMessage(const webrtc::DataBuffer& buffer) {
   std::string message(buffer.data.data<char>(), buffer.data.size());
   RTC_LOG(LS_INFO) << "Received Datachannel message: " << message;
 
-<<<<<<< HEAD
   // Echo back the received message through the data channel
   rtc::CopyOnWriteBuffer echo_buffer(message);
   webrtc::DataBuffer echo_data(echo_buffer, false);
