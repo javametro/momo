@@ -9,7 +9,7 @@
 #include <third_party/libyuv/include/libyuv/convert_from.h>
 #include <third_party/libyuv/include/libyuv/video_common.h>
 
-#define STD_ASPECT 1.33
+#define STD_ASPECT 1.34
 #define WIDE_ASPECT 1.78
 #define FRAME_INTERVAL (1000 / 30)
 
@@ -21,29 +21,36 @@ SDLRenderer::SDLRenderer(int width, int height, bool fullscreen)
       width_(width),
       height_(height),
       rows_(1),
-      cols_(1) {
+      cols_(1),
+      show_title_bar_(false),
+      mouse_in_title_area_(false),
+      title_bar_texture_(nullptr),
+      minimize_button_(nullptr),
+      restore_button_(nullptr),
+      close_button_(nullptr),
+      last_mouse_move_time_(0) {
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
     RTC_LOG(LS_ERROR) << __FUNCTION__ << ": SDL_Init failed " << SDL_GetError();
     return;
   }
 
-  window_ =
-      SDL_CreateWindow("Momo WebRTC Native Client", SDL_WINDOWPOS_CENTERED,
-                       SDL_WINDOWPOS_CENTERED, width_, height_,
-                       SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+  window_ = SDL_CreateWindow(
+      "Momo WebRTC Native Client", SDL_WINDOWPOS_CENTERED,
+      SDL_WINDOWPOS_CENTERED, width_, height_,
+      SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS);
+
   if (window_ == nullptr) {
     RTC_LOG(LS_ERROR) << __FUNCTION__ << ": SDL_CreateWindow failed "
                       << SDL_GetError();
     return;
   }
 
-  if (fullscreen) {
-    SetFullScreen(true);
-  }
+  // Start in fullscreen by default
+  SetFullScreen(true);
+
+  CreateTitleBarTextures();
 
 #if defined(__APPLE__)
-  // Apple Silicon Mac + macOS 11.0 だと、
-  // SDL_CreateRenderer をメインスレッドで呼ばないとエラーになる
   renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
   if (renderer_ == nullptr) {
     RTC_LOG(LS_ERROR) << __FUNCTION__ << ": SDL_CreateRenderer failed "
@@ -62,6 +69,21 @@ SDLRenderer::~SDLRenderer() {
   if (ret != 0) {
     RTC_LOG(LS_ERROR) << __FUNCTION__ << ": SDL Thread error:" << ret;
   }
+
+  // Clean up textures
+  if (title_bar_texture_) {
+    SDL_DestroyTexture(title_bar_texture_);
+  }
+  if (minimize_button_) {
+    SDL_DestroyTexture(minimize_button_);
+  }
+  if (restore_button_) {
+    SDL_DestroyTexture(restore_button_);
+  }
+  if (close_button_) {
+    SDL_DestroyTexture(close_button_);
+  }
+
   if (renderer_) {
     SDL_DestroyRenderer(renderer_);
   }
@@ -83,8 +105,30 @@ void SDLRenderer::SetFullScreen(bool fullscreen) {
 
 void SDLRenderer::PollEvent() {
   SDL_Event e;
-  // 必ずメインスレッドから呼び出す
   while (SDL_PollEvent(&e) > 0) {
+    if (e.type == SDL_MOUSEMOTION) {
+      UpdateTitleBar();
+    }
+
+    if (e.type == SDL_MOUSEBUTTONDOWN && show_title_bar_) {
+      int x = e.button.x;
+      int y = e.button.y;
+
+      if (y < TITLE_BAR_HEIGHT) {
+        int window_width = width_;
+        if (x > window_width - BUTTON_WIDTH) {
+          // Close button
+          std::raise(SIGTERM);
+        } else if (x > window_width - 2 * BUTTON_WIDTH) {
+          // Restore button
+          SetFullScreen(false);
+        } else if (x > window_width - 3 * BUTTON_WIDTH) {
+          // Minimize button
+          SDL_MinimizeWindow(window_);
+        }
+      }
+    }
+
     if (e.type == SDL_WINDOWEVENT &&
         e.window.event == SDL_WINDOWEVENT_RESIZED &&
         e.window.windowID == SDL_GetWindowID(window_)) {
@@ -93,6 +137,7 @@ void SDLRenderer::PollEvent() {
       height_ = e.window.data2;
       SetOutlines();
     }
+
     if (e.type == SDL_KEYUP) {
       switch (e.key.keysym.sym) {
         case SDLK_f:
@@ -103,6 +148,7 @@ void SDLRenderer::PollEvent() {
           break;
       }
     }
+
     if (e.type == SDL_QUIT) {
       std::raise(SIGTERM);
     }
@@ -160,13 +206,29 @@ int SDLRenderer::RenderThread() {
         SDL_Rect draw_rect = {sink->GetOffsetX(), sink->GetOffsetY(),
                               sink->GetWidth(), sink->GetHeight()};
 
-        // flip (自画像とか？)
-        //SDL_RenderCopyEx(renderer_, texture, &image_rect, &draw_rect, 0, nullptr, SDL_FLIP_HORIZONTAL);
         SDL_RenderCopy(renderer_, texture, &image_rect, &draw_rect);
-
         SDL_DestroyTexture(texture);
       }
       SDL_RenderPresent(renderer_);
+
+      // Check if we need to show/hide title bar
+      int x, y;
+      SDL_GetMouseState(&x, &y);
+      bool in_title_area = y < TITLE_BAR_HEIGHT;
+
+      if (in_title_area) {
+        last_mouse_move_time_ = SDL_GetTicks();
+        if (!show_title_bar_) {
+          show_title_bar_ = true;
+        }
+      } else if (show_title_bar_ &&
+                 (SDL_GetTicks() - last_mouse_move_time_ > TITLE_SHOW_DELAY)) {
+        show_title_bar_ = false;
+      }
+
+      if (show_title_bar_) {
+        UpdateTitleBar();
+      }
 
       if (dispatch_) {
         dispatch_(std::bind(&SDLRenderer::PollEvent, this));
@@ -372,4 +434,149 @@ void SDLRenderer::RemoveTrack(webrtc::VideoTrackInterface* track) {
                      }),
       sinks_.end());
   SetOutlines();
+}
+
+void SDLRenderer::CreateTitleBarTextures() {
+  if (!renderer_)
+    return;
+
+  // Create semi-transparent black title bar
+  SDL_Surface* title_surface = SDL_CreateRGBSurface(
+      0, width_, SDLRenderer::TITLE_BAR_HEIGHT, 32, 0, 0, 0, 0);
+  SDL_FillRect(title_surface, NULL,
+               SDL_MapRGBA(title_surface->format, 0, 0, 0, 180));
+  title_bar_texture_ = SDL_CreateTextureFromSurface(renderer_, title_surface);
+  SDL_FreeSurface(title_surface);
+
+  // Create button surfaces
+  SDL_Surface* button_surface =
+      SDL_CreateRGBSurface(0, SDLRenderer::BUTTON_WIDTH,
+                           SDLRenderer::TITLE_BAR_HEIGHT, 32, 0, 0, 0, 0);
+
+  // Minimize button
+  SDL_FillRect(
+      button_surface, NULL,
+      SDL_MapRGBA(button_surface->format, SDLRenderer::BUTTON_NORMAL_COLOR.r,
+                  SDLRenderer::BUTTON_NORMAL_COLOR.g,
+                  SDLRenderer::BUTTON_NORMAL_COLOR.b,
+                  SDLRenderer::BUTTON_NORMAL_COLOR.a));
+
+  // Draw minimize icon (horizontal line)
+  SDL_Rect minimize_icon = {SDLRenderer::BUTTON_WIDTH / 4,
+                            SDLRenderer::TITLE_BAR_HEIGHT / 2,
+                            SDLRenderer::BUTTON_WIDTH / 2, 2};
+  SDL_FillRect(button_surface, &minimize_icon,
+               SDL_MapRGBA(button_surface->format, 255, 255, 255, 255));
+  minimize_button_ = SDL_CreateTextureFromSurface(renderer_, button_surface);
+
+  // Restore button
+  SDL_FillRect(
+      button_surface, NULL,
+      SDL_MapRGBA(button_surface->format, SDLRenderer::BUTTON_NORMAL_COLOR.r,
+                  SDLRenderer::BUTTON_NORMAL_COLOR.g,
+                  SDLRenderer::BUTTON_NORMAL_COLOR.b,
+                  SDLRenderer::BUTTON_NORMAL_COLOR.a));
+
+  // Draw restore icon (square)
+  SDL_Rect restore_icon = {
+      SDLRenderer::BUTTON_WIDTH / 4, SDLRenderer::TITLE_BAR_HEIGHT / 4,
+      SDLRenderer::BUTTON_WIDTH / 2, SDLRenderer::TITLE_BAR_HEIGHT / 2};
+  SDL_FillRect(button_surface, &restore_icon,
+               SDL_MapRGBA(button_surface->format, 255, 255, 255, 255));
+  restore_button_ = SDL_CreateTextureFromSurface(renderer_, button_surface);
+
+  // Close button
+  SDL_FillRect(
+      button_surface, NULL,
+      SDL_MapRGBA(button_surface->format, SDLRenderer::BUTTON_CLOSE_COLOR.r,
+                  SDLRenderer::BUTTON_CLOSE_COLOR.g,
+                  SDLRenderer::BUTTON_CLOSE_COLOR.b,
+                  SDLRenderer::BUTTON_CLOSE_COLOR.a));
+
+  DrawCloseIcon(button_surface, SDLRenderer::BUTTON_WIDTH);
+  close_button_ = SDL_CreateTextureFromSurface(renderer_, button_surface);
+
+  SDL_FreeSurface(button_surface);
+}
+
+void SDLRenderer::DrawCloseIcon(SDL_Surface* surface, int button_width) {
+  // Draw X using SDL_gfx or manual pixel plotting
+  const int margin = button_width / 4;
+  const int size = button_width / 2;
+
+  for (int i = 0; i < size; i++) {
+    // Draw main diagonal
+    SDL_Rect pixel1 = {margin + i, margin + i, 2, 2};
+    // Draw counter diagonal
+    SDL_Rect pixel2 = {margin + i, margin + size - i, 2, 2};
+
+    SDL_FillRect(surface, &pixel1,
+                 SDL_MapRGBA(surface->format, 255, 255, 255, 255));
+    SDL_FillRect(surface, &pixel2,
+                 SDL_MapRGBA(surface->format, 255, 255, 255, 255));
+  }
+}
+
+void SDLRenderer::UpdateTitleBar() {
+  if (!IsFullScreen())
+    return;
+
+  int x, y;
+  SDL_GetMouseState(&x, &y);
+
+  bool in_title_area = y < TITLE_BAR_HEIGHT;
+
+  if (in_title_area) {
+    last_mouse_move_time_ = SDL_GetTicks();
+    if (!show_title_bar_) {
+      show_title_bar_ = true;
+    }
+  } else if (show_title_bar_ &&
+             (SDL_GetTicks() - last_mouse_move_time_ > TITLE_SHOW_DELAY)) {
+    show_title_bar_ = false;
+  }
+
+  // Render title bar if needed
+  if (show_title_bar_ && IsFullScreen()) {
+    SDL_Rect title_rect = {0, 0, width_, TITLE_BAR_HEIGHT};
+    SDL_RenderCopy(renderer_, title_bar_texture_, NULL, &title_rect);
+
+    // Get mouse position for hover effects
+    int mouse_x, mouse_y;
+    SDL_GetMouseState(&mouse_x, &mouse_y);
+
+    // Render buttons
+    int x = width_ - BUTTON_WIDTH;
+    SDL_Rect button_rect = {x, 0, BUTTON_WIDTH, TITLE_BAR_HEIGHT};
+
+    // Close button
+    if (mouse_y < TITLE_BAR_HEIGHT && mouse_x > x) {
+      SDL_SetTextureColorMod(close_button_, 255, 255, 255);
+    } else {
+      SDL_SetTextureColorMod(close_button_, 220, 220, 220);
+    }
+    SDL_RenderCopy(renderer_, close_button_, NULL, &button_rect);
+
+    // Restore button
+    button_rect.x -= BUTTON_WIDTH;
+    if (mouse_y < TITLE_BAR_HEIGHT && mouse_x > button_rect.x &&
+        mouse_x < button_rect.x + BUTTON_WIDTH) {
+      SDL_SetTextureColorMod(restore_button_, 255, 255, 255);
+    } else {
+      SDL_SetTextureColorMod(restore_button_, 220, 220, 220);
+    }
+    SDL_RenderCopy(renderer_, restore_button_, NULL, &button_rect);
+
+    // Minimize button
+    button_rect.x -= BUTTON_WIDTH;
+    if (mouse_y < TITLE_BAR_HEIGHT && mouse_x > button_rect.x &&
+        mouse_x < button_rect.x + BUTTON_WIDTH) {
+      SDL_SetTextureColorMod(minimize_button_, 255, 255, 255);
+    } else {
+      SDL_SetTextureColorMod(minimize_button_, 220, 220, 220);
+    }
+    SDL_RenderCopy(renderer_, minimize_button_, NULL, &button_rect);
+
+    SDL_RenderPresent(renderer_);
+  }
 }

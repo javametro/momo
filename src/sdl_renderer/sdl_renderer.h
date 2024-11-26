@@ -29,9 +29,24 @@ class SDLRenderer : public VideoTrackReceiver {
   static int RenderThreadExec(void* data);
   int RenderThread();
 
+  static const int TITLE_BAR_HEIGHT = 32;
+  static const int BUTTON_WIDTH = 46;
+  static const int TITLE_SHOW_DELAY = 1000;  // ms
+  static inline const SDL_Color BUTTON_NORMAL_COLOR = {128, 128, 128, 255};
+  static inline const SDL_Color BUTTON_HOVER_COLOR = {192, 192, 192, 255};
+  static inline const SDL_Color BUTTON_CLOSE_COLOR = {232, 17, 35, 255};
+
   void SetOutlines();
   void AddTrack(webrtc::VideoTrackInterface* track) override;
   void RemoveTrack(webrtc::VideoTrackInterface* track) override;
+
+  bool IsFullScreen();
+  void SetFullScreen(bool fullscreen);
+  void DrawCloseIcon(SDL_Surface* surface, int button_width);
+  void PollEvent();
+  void UpdateTitleBar();
+
+  void CreateTitleBarTextures();
 
  protected:
   class Sink : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
@@ -74,10 +89,6 @@ class SDLRenderer : public VideoTrackReceiver {
   };
 
  private:
-  bool IsFullScreen();
-  void SetFullScreen(bool fullscreen);
-  void PollEvent();
-
   webrtc::Mutex sinks_lock_;
   typedef std::vector<
       std::pair<webrtc::VideoTrackInterface*, std::unique_ptr<Sink> > >
@@ -92,6 +103,14 @@ class SDLRenderer : public VideoTrackReceiver {
   int height_;
   int rows_;
   int cols_;
+  bool show_title_bar_;
+  bool mouse_in_title_area_;
+  SDL_Rect title_bar_rect_;
+  SDL_Texture* title_bar_texture_;
+  SDL_Texture* minimize_button_;
+  SDL_Texture* restore_button_;
+  SDL_Texture* close_button_;
+  Uint32 last_mouse_move_time_;
 };
 
 #endif
