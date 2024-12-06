@@ -100,7 +100,8 @@ bool SDLRenderer::IsFullScreen() {
 void SDLRenderer::SetFullScreen(bool fullscreen) {
   SDL_SetWindowFullscreen(window_,
                           fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
-  SDL_ShowCursor(fullscreen ? SDL_DISABLE : SDL_ENABLE);
+  // Don't disable the cursor - we need it for UI interaction
+  // SDL_ShowCursor(fullscreen ? SDL_DISABLE : SDL_ENABLE);
 }
 
 void SDLRenderer::PollEvent() {
@@ -212,19 +213,19 @@ int SDLRenderer::RenderThread() {
       SDL_RenderPresent(renderer_);
 
       // Check if we need to show/hide title bar
-      int x, y;
-      SDL_GetMouseState(&x, &y);
-      bool in_title_area = y < TITLE_BAR_HEIGHT;
+      // int x, y;
+      // SDL_GetMouseState(&x, &y);
+      // bool in_title_area = y < TITLE_BAR_HEIGHT;
 
-      if (in_title_area) {
-        last_mouse_move_time_ = SDL_GetTicks();
-        if (!show_title_bar_) {
-          show_title_bar_ = true;
-        }
-      } else if (show_title_bar_ &&
-                 (SDL_GetTicks() - last_mouse_move_time_ > TITLE_SHOW_DELAY)) {
-        show_title_bar_ = false;
-      }
+      // if (in_title_area) {
+      //   last_mouse_move_time_ = SDL_GetTicks();
+      //   if (!show_title_bar_) {
+      //     show_title_bar_ = true;
+      //   }
+      // } else if (show_title_bar_ &&
+      //            (SDL_GetTicks() - last_mouse_move_time_ > TITLE_SHOW_DELAY)) {
+      //   show_title_bar_ = false;
+      // }
 
       if (show_title_bar_) {
         UpdateTitleBar();
@@ -526,18 +527,16 @@ void SDLRenderer::UpdateTitleBar() {
 
   bool in_title_area = y < TITLE_BAR_HEIGHT;
 
+  // Update title bar visibility state
   if (in_title_area) {
     last_mouse_move_time_ = SDL_GetTicks();
-    if (!show_title_bar_) {
-      show_title_bar_ = true;
-    }
-  } else if (show_title_bar_ &&
-             (SDL_GetTicks() - last_mouse_move_time_ > TITLE_SHOW_DELAY)) {
+    show_title_bar_ = true;
+  } else if (SDL_GetTicks() - last_mouse_move_time_ > TITLE_SHOW_DELAY) {
     show_title_bar_ = false;
   }
 
   // Render title bar if needed
-  if (show_title_bar_ && IsFullScreen()) {
+  if (show_title_bar_) {
     SDL_Rect title_rect = {0, 0, width_, TITLE_BAR_HEIGHT};
     SDL_RenderCopy(renderer_, title_bar_texture_, NULL, &title_rect);
 

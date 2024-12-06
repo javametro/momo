@@ -76,8 +76,8 @@ int main(int argc, char* argv[]) {
   rtc::LogMessage::LogThreads();
 
   std::unique_ptr<rtc::FileRotatingLogSink> log_sink(
-      new rtc::FileRotatingLogSink("C:\\ProgramData", "webrtc_logs", kDefaultMaxLogFileSize,
-                                   10));
+      new rtc::FileRotatingLogSink("C:\\ProgramData", "webrtc_logs",
+                                   kDefaultMaxLogFileSize, 10));
   if (!log_sink->Init()) {
     RTC_LOG(LS_ERROR) << __FUNCTION__ << "Failed to open log file";
     log_sink.reset();
@@ -187,7 +187,8 @@ int main(int argc, char* argv[]) {
 
   if (!capturer && !args.no_video_device) {
     std::cerr << "failed to create capturer" << std::endl;
-    return 1;
+    //return 1;
+    capturer = nullptr;
   }
 
   RTCManagerConfig rtcm_config;
